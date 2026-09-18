@@ -20,7 +20,7 @@ Adobe CMap resources are covered by their own copyright but the same license:
 
 See https://github.com/adobe-type-tools/cmap-resources
 -->
-<html dir="ltr" mozdisallowselectionprint>
+<html dir="ltr" mozdisallowselectionprint data-env='{{pdfjsenv}}'>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -55,6 +55,9 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     <script src="viewer.js" type="module-shim"></script>
 <!--#endif-->
+
+<script src="megaGesture.js"></script>
+<script src="viewer.gesture.js"></script>
 
 <!--#if (GENERIC && !MINIFIED) -->
 <!--#include viewer-snippet.html-->

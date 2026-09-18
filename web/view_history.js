@@ -14,7 +14,8 @@
  */
 
 const DEFAULT_VIEW_HISTORY_CACHE_SIZE = 200;
-const global = typeof window !== "undefined" ? window.parent : false;
+const global =
+  typeof window !== "undefined" ? window.pdfjsEnv || window.parent : false;
 
 /**
  * View History - This is a utility for saving various view parameters for
@@ -78,15 +79,8 @@ class ViewHistory {
   async _readFromStorage() {
     if (
       typeof global.M === "object" &&
-      typeof global.M.setPersistentData === "function"
+      typeof global.M.getPersistentData === "function"
     ) {
-      const value = localStorage.getItem("pdfjs.history");
-      if (value) {
-        localStorage.removeItem("pdfjs.history");
-        return global.M.setPersistentData("pdfjs.history", JSON.parse(value))
-          .then(() => value)
-          .catch(() => value);
-      }
       return global.M.getPersistentData("pdfjs.history").catch(() => false);
     }
     if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
