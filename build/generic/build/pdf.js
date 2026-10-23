@@ -329,7 +329,7 @@ var _text_layer = __w_pdfjs_require__(21);
 
 var _svg = __w_pdfjs_require__(22);
 
-const pdfjsVersion = '2.6.183';
+const pdfjsVersion = '2.6.184';
 const pdfjsBuild = '277a92d2.meganz';
 {
   const {
@@ -1951,7 +1951,7 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
 
   return worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '2.6.183',
+    apiVersion: '2.6.184',
     source: {
       data: source.data,
       url: source.url,
@@ -3721,7 +3721,7 @@ async function getPreviewImage(data, pageNum = 1, scale = 2.5) {
   return buffer;
 }
 
-const version = '2.6.183';
+const version = '2.6.184';
 exports.version = version;
 const build = '277a92d2.meganz';
 exports.build = build;
@@ -3747,7 +3747,7 @@ const OptionKind = {
   PREFERENCE: 0x80
 };
 exports.OptionKind = OptionKind;
-const global = typeof window !== "undefined" ? window.parent : false;
+const global = typeof window !== "undefined" ? window.pdfjsEnv || window.parent : false;
 const defaultOptions = {
   cursorToolOnLoad: {
     value: 0,
@@ -3904,7 +3904,7 @@ const defaultOptions = {
     kind: OptionKind.WORKER
   },
   workerSrc: {
-    value: (global.is_extension ? "" : "/") + "pdf.worker.js?v=2.6.183",
+    value: (global.rootpath || (global.is_extension ? "" : "/")) + "pdf.worker.js?v=2.6.184",
     kind: OptionKind.WORKER
   }
 };

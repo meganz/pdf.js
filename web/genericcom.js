@@ -29,10 +29,16 @@ const GenericCom = {};
 
 class GenericPreferences extends BasePreferences {
   async _writeToStorage(prefObj) {
+    if (window.pdfjsEnv) {
+      return;
+    }
     localStorage.setItem("pdfjs.preferences", JSON.stringify(prefObj));
   }
 
   async _readFromStorage(prefObj) {
+    if (window.pdfjsEnv) {
+      return null;
+    }
     return JSON.parse(localStorage.getItem("pdfjs.preferences"));
   }
 }

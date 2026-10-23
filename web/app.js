@@ -36,6 +36,7 @@ import {
 import { AppOptions, OptionKind } from "./app_options.js";
 import {
   build,
+  CMapCompressionType,
   createPromiseCapability,
   getDocument,
   getFilenameFromUrl,
@@ -74,6 +75,55 @@ const DISABLE_AUTO_FETCH_LOADING_BAR_TIMEOUT = 5000; // ms
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
 const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000; // ms
 const ENABLE_PERMISSIONS_CLASS = "enablePermissions";
+
+function postToHost(message) {
+  if (window.parent !== window) {
+    window.parent.postMessage(message, "*");
+  }
+}
+
+const host = {
+  seq: 0,
+  pending: new Map(),
+
+  request(op, data) {
+    const id = ++this.seq;
+    return new Promise(resolve => {
+      this.pending.set(id, resolve);
+      postToHost({ type: "pdfviewer:request", id, op, data });
+    });
+  },
+};
+
+class HostCMapReaderFactory {
+  constructor({ baseUrl = null, isCompressed = false }) {
+    this.baseUrl = baseUrl;
+    this.isCompressed = isCompressed;
+  }
+
+  async fetch({ name }) {
+    if (!this.baseUrl || !name) {
+      throw new Error(
+        'The CMap "baseUrl" and "name" parameters must be specified.'
+      );
+    }
+    const url = this.baseUrl + name + (this.isCompressed ? ".bcmap" : "");
+    const data = await host.request("cmap", url);
+
+    if (!data) {
+      throw new Error(
+        `Unable to load ${this.isCompressed ? "binary " : ""}CMap at: ${url}`
+      );
+    }
+
+    return {
+      cMapData: new Uint8Array(data),
+      compressionType: this.isCompressed
+        ? CMapCompressionType.BINARY
+        : CMapCompressionType.NONE,
+    };
+  }
+}
 
 const ViewOnLoad = {
   UNKNOWN: -1,
@@ -704,6 +754,11 @@ const PDFViewerApplication = {
     }
     // Set the necessary API parameters, using the available options.
     const apiParameters = AppOptions.getAll(OptionKind.API);
+
+    if (window.pdfjsEnv) {
+      parameters.CMapReaderFactory = HostCMapReaderFactory;
+    }
+
     for (const key in apiParameters) {
       let value = apiParameters[key];
 
@@ -1671,73 +1726,100 @@ function webViewerInitialized() {
   );
 
   let openTick = 0;
-  appConfig.appContainer.addEventListener(
-    "pdfjs-openfile.meganz",
-    function (ev) {
-      const data = ev.data;
-      const tick = ++openTick;
-      const promise = PDFViewerApplication.close() || Promise.resolve();
-      promise
-        .then(() => {
-          if (openTick !== tick) {
-            return false;
-          }
-          console.warn("ack, pdfjs-openfile", data);
-          return PDFViewerApplication.open(data);
-        })
-        .catch(reason => {
-          PDFViewerApplication.l10n
-            .get(
-              "loading_error",
-              null,
-              "An error occurred while loading the PDF."
-            )
-            .then(msg => {
-              PDFViewerApplication.error(msg, reason);
-            });
-        });
-      ev.data = null;
-    },
-    true
-  );
 
-  appConfig.appContainer.addEventListener(
-    "pdfjs-cleanup.meganz",
-    function () {
-      const promise = PDFViewerApplication.close() || Promise.resolve();
-      promise.then(function() {
-        if (window.parent !== window) {
-          delete window.pdfjsLib;
-          delete window["pdfjs-dist/build/pdf"];
-          window.document.open();
-          window.document.close();
+  const openFile = data => {
+    const tick = ++openTick;
+    const promise = PDFViewerApplication.close() || Promise.resolve();
+    promise
+      .then(() => {
+        if (openTick !== tick) {
+          return false;
         }
-        console.warn("ack, pdfjs-cleanup");
+        console.warn("ack, pdfviewer:load", data);
+        return PDFViewerApplication.open(data);
+      })
+      .catch(reason => {
+        PDFViewerApplication.l10n
+          .get("loading_error", null, "An error occurred while loading the PDF.")
+          .then(msg => {
+            PDFViewerApplication.error(msg, reason);
+          });
       });
-    },
-    true
-  );
+  };
+
+  const cleanup = () => {
+    const promise = PDFViewerApplication.close() || Promise.resolve();
+    promise.then(function () {
+      if (window.parent !== window) {
+        delete window.pdfjsLib;
+        delete window["pdfjs-dist/build/pdf"];
+        window.document.open();
+        window.document.close();
+      }
+      console.warn("ack, pdfviewer:cleanup");
+    });
+  };
+
+  const linkRelay = ev => {
+    const link = ev.target.closest("a[href]");
+    const href = link && link.getAttribute("href");
+
+    if (href && ev.button < 2 && /^(https?|mailto|tel):/i.test(href)) {
+      ev.preventDefault();
+      postToHost({ type: "pdfviewer:open-url", url: href });
+    }
+  };
+
+  appConfig.appContainer.addEventListener("click", linkRelay, true);
+  appConfig.appContainer.addEventListener("auxclick", linkRelay, true);
+
+  window.addEventListener("message", ev => {
+    const msg = ev.data;
+
+    if (ev.source !== window.parent || !msg || typeof msg !== "object") {
+      return;
+    }
+
+    if (msg.type === "pdfviewer:load") {
+      if (msg.gesture) {
+        megaViewerGesture("pdf", "#viewerContainer");
+      }
+      openFile(msg.buffer);
+    } else if (msg.type === "pdfviewer:cleanup") {
+      cleanup();
+    } else if (msg.type === "pdfviewer:reply") {
+      const resolve = host.pending.get(msg.id);
+
+      if (resolve) {
+        host.pending.delete(msg.id);
+        resolve(msg.res);
+      }
+    }
+  });
+
+  if (window.pdfjsEnv) {
+    window.pdfjsEnv.M = {
+      getPersistentData: () => host.request("get"),
+      setPersistentData: (name, data) => host.request("set", data),
+    };
+  }
 
   document
     .querySelector(".toolbarButton.meganz")
     .addEventListener("click", ev => {
-      const global = window.parent;
-
       ev.preventDefault();
       ev.stopPropagation();
 
       if (ev.ctrlKey || ev.metaKey) {
-        global.M.getPersistentData("pdfjs.history").dump();
+        host.request("get").then(res => console.info("pdfjs.history", res));
       } else if (ev.shiftKey) {
-        global.M.delPersistentData("pdfjs.history").dump();
+        host.request("del").then(() => console.info("pdfjs.history cleared"));
       } else {
         console.clear();
       }
     });
 
-  const ev = document.createEvent("HTMLEvents");
-  ev.initEvent("pdfjs-webViewerInitialized.meganz", true);
-  appConfig.appContainer.dispatchEvent(ev);
+  postToHost({ type: "pdfviewer:ready" });
 }
 
 function webViewerResetPermissions() {

@@ -22,7 +22,8 @@ const OptionKind = {
   PREFERENCE: 0x80,
 };
 
-const global = typeof window !== "undefined" ? window.parent : false;
+const global =
+  typeof window !== "undefined" ? window.pdfjsEnv || window.parent : false;
 
 /**
  * PLEASE NOTE: To avoid introducing unnecessary dependencies, we specify the
@@ -237,7 +238,8 @@ const defaultOptions = {
     value:
       typeof PDFJSDev === "undefined" || !PDFJSDev.test("PRODUCTION")
         ? "../src/worker_loader.js"
-        : (global.is_extension ? "" : "/") + "pdf.worker.js",
+        : (global.rootpath || (global.is_extension ? "" : "/")) +
+          "pdf.worker.js",
     kind: OptionKind.WORKER,
   },
 };
